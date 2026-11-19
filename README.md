@@ -15,7 +15,7 @@ A fully offline, zero-dependency educational tool that solves the **"where am I"
 
 | File | Description |
 | --- | --- |
-| `SLAM高斯牛顿定位计算器.html` | Main offline calculator (single file, bilingual, zero dependency) |
+| `SLAM高斯牛顿定位计算器.html` | Main offline calculator (single file, bilingual, zero dependency). Recommended for daily use — easier to customize and more polished visuals; its purpose differs substantially from the notebooks |
 | `SLAM高斯牛顿定位计算器.ipynb` | Chinese notebook with visible code (Q1–Q4) |
 | `SLAM_Gauss_Newton_Localization.ipynb` | English notebook with visible code (Q1–Q4) |
 | `build_nb.py`, `build_nb_en.py` | Generators that build the two notebooks (optional, for reproducibility) |
@@ -37,6 +37,10 @@ A fully offline, zero-dependency educational tool that solves the **"where am I"
 
 - HTML: none (plain HTML/CSS/vanilla JavaScript).
 - Notebooks: Python with `numpy` and `matplotlib`.
+
+## Future Work & Problems
+
+After adding direction arrows to the 3D trajectories, users can visually identify at a glance the two trajectories closest in direction. It remains hard, however, to judge the **distance** between them intuitively, so charts are still needed. Suggestions for more intuitive distance-comparison approaches are very welcome.
 
 ## License
 
@@ -61,7 +65,7 @@ Released under the MIT License.
 
 | 文件 | 说明 |
 | --- | --- |
-| `SLAM高斯牛顿定位计算器.html` | 主离线计算器（单文件、双语、零依赖） |
+| `SLAM高斯牛顿定位计算器.html` | 主离线计算器（单文件、双语、零依赖）。日常使用推荐：自定义更方便、可视化更完善；用途与 notebook 有明显区别 |
 | `SLAM高斯牛顿定位计算器.ipynb` | 中文 notebook，代码可见（Q1–Q4） |
 | `SLAM_Gauss_Newton_Localization.ipynb` | 英文 notebook，代码可见（Q1–Q4） |
 | `build_nb.py`、`build_nb_en.py` | 生成两份 notebook 的脚本（可选，用于复现） |
@@ -83,6 +87,10 @@ Released under the MIT License.
 
 - HTML：无（纯 HTML/CSS/原生 JavaScript）。
 - Notebook：Python 及 `numpy`、`matplotlib`。
+
+## 后续工作与问题
+
+在 3D 轨迹中加入方向箭头后，用户可以通过目视大致判断方向上最接近的两条轨迹；但仍难以直观判断它们之间的距离，因此仍然需要借助图表。欢迎大家提供让距离对比更直观的方案。
 
 ## 许可
 
