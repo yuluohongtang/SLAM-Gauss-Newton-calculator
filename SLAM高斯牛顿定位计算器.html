@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SLAM 高斯-牛顿离线定位计算器（群体/轨迹版）</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f4c5c'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%232a9d8f' stroke-width='2'/%3E%3Cpath d='M16 4v6M16 22v6M4 16h6M22 16h6' stroke='%23e9f5f3' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#16303a; --sub:#5b7180; --line:#d5dde1; --bg:#eef2f4; --card:#fff;
+    --teal:#0f4c5c; --accent:#2a9d8f; --accent-d:#1f7a6f; --warn:#b3261e; --warn-bg:#fbe9e7;
+    --mono:Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+    font-size:14px;line-height:1.55;padding-bottom:60px}
+  header{background:var(--teal);color:#fff;padding:22px 20px 18px}
+  header h1{margin:0 0 6px;font-size:21px;font-weight:700}
+  header p{margin:4px 0;color:#cfe3e0;font-size:13px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+  section.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;margin-top:18px}
+  h2{font-size:16px;margin:0 0 14px;padding-left:10px;border-left:4px solid var(--accent)}
+  h3{font-size:14px;color:var(--teal);margin:16px 0 8px}
+  .mat-input{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:240px}
+  .mat-input input{width:100%;padding:7px 4px;text-align:center;border:1px solid var(--line);
+    border-radius:6px;font-family:var(--mono);font-size:14px;background:#fbfcfd}
+  .mat-input input:focus,.xrow input:focus,.lm-table input:focus,.meas-input:focus,select:focus{outline:2px solid var(--accent)}
+  .switch-row{display:flex;gap:22px;flex-wrap:wrap;margin:6px 0 4px}
+  .sw{display:flex;align-items:center;gap:8px;font-weight:600;min-height:44px;cursor:pointer}
+  .sw input{width:18px;height:18px;accent-color:var(--accent)}
+  .sw-extra{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:6px 0 10px;
+    padding:10px 14px;background:#f0f7f6;border-radius:8px}
+  .sw-extra label{display:flex;align-items:center;gap:6px;font-size:13.5px}
+  input,select{border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:14px;background:#fff}
+  .xrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .xrow label{display:flex;align-items:center;gap:6px;font-family:var(--mono)}
+  .xrow input{width:84px;padding:7px;text-align:center;border:1px solid var(--line);border-radius:6px;
+    font-family:var(--mono);font-size:14px}
+  .lm-table{width:100%;border-collapse:collapse;margin-top:8px;table-layout:fixed}
+  .lm-table th{color:var(--sub);font-weight:600;font-size:13px;padding:6px 4px;text-align:center}
+  .lm-table td{padding:5px 4px;text-align:center}
+  .lm-table input{width:100%;padding:7px 4px;border:1px solid var(--line);border-radius:6px;
+    font-family:var(--mono);font-size:13px;text-align:center}
+  .lm-name{font-family:var(--mono);font-weight:700;color:var(--teal)}
+  .hint{color:var(--sub);font-size:12px;margin-top:6px}
+  .robot-block{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0;background:#fcfdfd}
+  .robot-block .rb-title{font-weight:700;color:var(--teal);margin-bottom:8px}
+  .meas-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+  .meas-tbl th{color:var(--sub);font-size:12.5px;font-weight:600;padding:4px;text-align:center}
+  .meas-tbl td{padding:4px;text-align:center}
+  .meas-input{width:100%;padding:6px 3px;border:1px solid var(--line);border-radius:6px;
+    font-family:var(--mono);font-size:13px;text-align:center}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  button{border:none;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer;
+    font-family:inherit;font-weight:600;min-height:42px}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-d)}
+  .btn-ghost{background:#fff;color:var(--teal);border:1px solid var(--teal)}
+  .btn-ghost:hover{background:#eef7f5}
+  #error{display:none;background:var(--warn-bg);color:var(--warn);border:1px solid #e6b0ac;
+    border-radius:8px;padding:10px 14px;margin-top:14px;font-size:13px}
+  .note{background:#f0f7f6;border:1px solid #cde4e0;border-radius:8px;padding:10px 14px;
+    color:#2c5a55;font-size:13px;margin-bottom:14px}
+  .sum-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .sum-tbl th{background:var(--teal);color:#fff;padding:8px 6px;font-weight:600}
+  .sum-tbl td{padding:6px;border-bottom:1px solid var(--line);text-align:center;font-family:var(--mono)}
+  .sum-tbl tr:nth-child(even) td{background:#f7f9fa}
+  .ok-tag{color:var(--accent-d);font-weight:700}
+  .bad-tag{color:var(--warn);font-weight:700}
+  .mwrap{display:inline-grid;grid-template-columns:auto auto;grid-template-rows:auto auto;
+    column-gap:8px;align-items:center;margin:10px 0}
+  .mlabels{grid-column:2;grid-row:1;display:flex;justify-content:space-around;
+    font-family:var(--mono);color:var(--sub);font-size:12.5px}
+  .mlabels span{min-width:68px;text-align:center}
+  .rlabels{grid-column:1;grid-row:2;display:flex;flex-direction:column;justify-content:center;
+    font-family:var(--mono);color:var(--sub)}
+  .rlabels span{height:28px;display:flex;align-items:center;justify-content:flex-end;padding-right:2px}
+  .mat{grid-column:2;grid-row:2;border-left:3px solid var(--ink);border-right:3px solid var(--ink);
+    padding:2px 10px}
+  .mat table{border-collapse:collapse}
+  .mat td{font-family:var(--mono);height:28px;min-width:68px;padding:0 8px;text-align:right;
+    font-size:13.5px;white-space:nowrap}
+  .vec-h{font-family:var(--mono);color:var(--teal);font-weight:700;margin:14px 0 4px}
+  .det-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .det-controls select{min-width:150px}
+  canvas{display:block;max-width:100%}
+  .heat-wrap{position:relative;overflow-x:auto;margin:8px 0}
+  .heat-canvas{border:1px solid var(--line);border-radius:6px;cursor:pointer}
+  .legend-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin:6px 0;flex-wrap:wrap}
+  .legend-bar .bar{height:12px;width:180px;border-radius:3px}
+  .trajectory-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}
+  .trajectory-legend .lg{display:flex;align-items:center;gap:6px;font-size:13px}
+  .trajectory-legend .swatch{width:14px;height:4px;border-radius:2px}
+  .view-btns{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;align-items:center}
+  .view-btns button{padding:7px 12px;min-height:36px;font-size:13px}
+  .view-btns button.active{background:var(--teal);color:#fff}
+  .collapsed-row{display:none}
+  .expand-row td{text-align:center;padding:8px;color:var(--teal);cursor:pointer;font-weight:600}
+  .line-canvas{border:1px solid var(--line);border-radius:6px;background:#fff}
+  .sel-hint{font-size:13px;color:var(--teal);margin:6px 0;font-weight:600}
+  .cos-best{background:#f0f7f6;border:1px solid #cde4e0;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13.5px;color:#2c5a55}
+  .viz-toggle{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .viz-toggle button{padding:7px 14px;min-height:36px;font-size:13px}
+  .viz-toggle button.active{background:var(--teal);color:#fff}
+  @media (max-width:760px){
+    section.card{padding:14px}
+    .mat td{min-width:54px;font-size:12.5px}
+    .mlabels span{min-width:54px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <button id="btn-lang" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;min-height:38px;padding:6px 14px;">EN</button>
+    <h1 data-i18n="app_title">SLAM 高斯-牛顿离线定位计算器（群体 / 轨迹版）</h1>
+    <p data-i18n="app_sub1">两个开关自由组合：群体开关决定机器人数量，轨迹开关决定时刻数量；每个「机器人 × 时刻」单元独立 GN 定位</p>
+    <p data-i18n="app_sub2">零依赖、完全离线，双击即可使用。B_L 不再需要（正交旋转不改变距离），位置统一在 B_w 基下表达</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="card">
+    <h2><span data-i18n="sec_basis">1. 世界坐标系基 B_w（3 × 3，按列写基向量，默认单位阵）</span></h2>
+    <div class="mat-input" id="bw-input"></div>
+
+    <h2 style="margin-top:22px"><span data-i18n="sec_switches">2. 两个开关</span></h2>
+    <div class="switch-row">
+      <label class="sw"><input type="checkbox" id="sw-group"><span data-i18n="sw_group">群体模式（多个机器人）</span></label>
+      <label class="sw"><input type="checkbox" id="sw-track"><span data-i18n="sw_track">轨迹模式（多个时刻）</span></label>
+    </div>
+    <div class="sw-extra" id="group-extra" style="display:none">
+      <label><span data-i18n="robot_count">机器人数量 R：</span>
+        <select id="robot-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select>
+      </label>
+    </div>
+    <div class="sw-extra" id="track-extra" style="display:none">
+      <label><span data-i18n="step_count_label">时刻总数 T：</span><input type="number" id="step-count" value="4" min="2" max="200" step="1" style="width:90px"></label>
+      <label><span data-i18n="dt_label">时间间隔 Δt：</span><input type="number" id="dt" value="1" min="0" step="any" style="width:90px"></label>
+      <span class="hint" data-i18n="dt_hint">Δt 只用于生成时间戳标签，不参与定位计算；时间戳 t_k = k·Δt</span>
+    </div>
+
+    <h2 style="margin-top:22px"><span data-i18n="sec_x0">3. 初始猜测 X[0]（所有单元共用同一起点）</span></h2>
+    <div class="xrow">
+      <label>x = <input type="number" step="any" id="x0-0" value="0"></label>
+      <label>y = <input type="number" step="any" id="x0-1" value="0"></label>
+      <label>z = <input type="number" step="any" id="x0-2" value="0"></label>
+    </div>
+
+    <h2 style="margin-top:22px"><span data-i18n="sec_landmark">4. Landmark（所有单元共用同一组）</span></h2>
+    <div class="xrow"><label><span data-i18n="lm_count">Landmark 数量：</span>
+      <select id="lm-count"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select>
+    </label></div>
+    <table class="lm-table">
+      <colgroup><col style="width:10%"><col style="width:22%"><col style="width:22%"><col style="width:22%"><col style="width:24%"></colgroup>
+      <thead><tr><th data-i18n="col_point">点</th><th>c₁</th><th>c₂</th><th>c₃</th><th data-i18n="col_note">备注</th></tr></thead>
+      <tbody id="lm-body"></tbody>
+    </table>
+
+    <h2 style="margin-top:22px"><span data-i18n="sec_measure">5. 各单元实测距离（可填数字或 sqrt(14)）</span></h2>
+    <div id="measure-area"></div>
+
+    <div id="error"></div>
+    <div class="btns">
+      <button class="btn-ghost" id="btn-load-single" data-i18n="btn_single">单点示例</button>
+      <button class="btn-ghost" id="btn-load-q3" data-i18n="btn_q3">载入Q3群体示例</button>
+      <button class="btn-ghost" id="btn-load-q2" data-i18n="btn_q2">载入Q2轨迹示例</button>
+      <button class="btn-ghost" id="btn-gen-q4" data-i18n="btn_q4">随机生成Q4</button>
+      <button class="btn-primary" id="btn-build" data-i18n="btn_build">构建并求解</button>
+      <button class="btn-ghost" id="btn-reset" data-i18n="btn_reset">清空结果</button>
+    </div>
+  </section>
+
+  <section class="card" id="result-section" style="display:none">
+    <h2 data-i18n="sec_summary">6. 求解结果汇总</h2>
+    <div id="summary-area"></div>
+    <div id="distmatrix-area"></div>
+    <h2 style="margin-top:24px" data-i18n="sec_detail">7. 详细 GN 矩阵（选单元、选迭代步）</h2>
+    <div class="det-controls">
+      <select id="det-unit"></select>
+      <select id="det-step"></select>
+    </div>
+    <div id="detail-area"></div>
+    <h2 style="margin-top:24px" data-i18n="sec_reverse">8. 反验证（Q2-2 Reversely Check：预测距离 vs 实测距离）</h2>
+    <div id="reverse-area"></div>
+    <h2 style="margin-top:24px" data-i18n="sec_pairheat">9. 机器人两两距离：配对 × 时间热图（点击任一行看该对的折线）</h2>
+    <div id="pairheat-area"></div>
+    <div id="pairline-area"></div>
+    <h2 style="margin-top:24px" data-i18n="sec_traj">10. 轨迹可视化（3D，可拖拽旋转；landmark 为黑点）</h2>
+    <div class="view-btns" id="view-btns">
+      <button data-v="free" class="active" data-i18n="view_free">自由视角</button>
+      <button data-v="xy" data-i18n="view_xy">正视 XY</button>
+      <button data-v="xz" data-i18n="view_xz">正视 XZ</button>
+      <button data-v="yz" data-i18n="view_yz">正视 YZ</button>
+    </div>
+    <div class="viz-toggle" id="track-toggle">
+      <button data-t="solved" class="active" data-i18n="tg_solved">反解轨迹</button>
+      <button data-t="true" data-i18n="tg_true">真实轨迹</button>
+      <button data-t="both" data-i18n="tg_both">两者叠加</button>
+    </div>
+    <div class="heat-wrap"><canvas id="traj-canvas" class="heat-canvas"></canvas></div>
+    <div id="traj-legend"></div>
+    <h2 style="margin-top:24px" data-i18n="sec_cos">11. 轨迹方向相似度 cosθ（4-4，点击格子高亮对应两条轨迹）</h2>
+    <div id="cos-area"></div>
+  </section>
+</div>
+
+<script>
+/* ================= 中英文 i18n ================= */
+let lang="zh";
+const I18N={
+zh:{
+ page_title:"SLAM 高斯-牛顿离线定位计算器（群体/轨迹版）",
+ app_title:"SLAM 高斯-牛顿离线定位计算器（群体 / 轨迹版）",
+ app_sub1:"两个开关自由组合：群体开关决定机器人数量，轨迹开关决定时刻数量；每个「机器人 × 时刻」单元独立 GN 定位",
+ app_sub2:"零依赖、完全离线，双击即可使用。B_L 不再需要（正交旋转不改变距离），位置统一在 B_w 基下表达",
+ sec_basis:"1. 世界坐标系基 B_w（3 × 3，按列写基向量，默认单位阵）",
+ sec_switches:"2. 两个开关", sw_group:"群体模式（多个机器人）", sw_track:"轨迹模式（多个时刻）",
+ robot_count:"机器人数量 R：", step_count_label:"时刻总数 T：", dt_label:"时间间隔 Δt：",
+ dt_hint:"Δt 只用于生成时间戳标签，不参与定位计算；时间戳 t_k = k·Δt",
+ sec_x0:"3. 初始猜测 X[0]（所有单元共用同一起点）",
+ sec_landmark:"4. Landmark（所有单元共用同一组）", lm_count:"Landmark 数量：",
+ col_point:"点", col_note:"备注",
+ sec_measure:"5. 各单元实测距离（可填数字或 sqrt(14)）",
+ btn_single:"单点示例", btn_q3:"载入Q3群体示例", btn_q2:"载入Q2轨迹示例", btn_q4:"随机生成Q4",
+ btn_build:"构建并求解", btn_reset:"清空结果",
+ sec_summary:"6. 求解结果汇总", sec_detail:"7. 详细 GN 矩阵（选单元、选迭代步）",
+ sec_reverse:"8. 反验证（Q2-2 Reversely Check：预测距离 vs 实测距离）",
+ sec_pairheat:"9. 机器人两两距离：配对 × 时间热图（点击任一行看该对的折线）",
+ sec_traj:"10. 轨迹可视化（3D，可拖拽旋转；landmark 为黑点）",
+ view_free:"自由视角", view_xy:"正视 XY", view_xz:"正视 XZ", view_yz:"正视 YZ",
+ tg_solved:"反解轨迹", tg_true:"真实轨迹", tg_both:"两者叠加",
+ sec_cos:"11. 轨迹方向相似度 cosθ（4-4，点击格子高亮对应两条轨迹）",
+ robot_n:"机器人 {0}", expand_more:"展开其余 {0} 个时刻", collapse:"收起",
+ col_time:"时刻", to_x:"到 {0}", conv_n:"收敛 ({0}步)", iter_limit:"达迭代上限",
+ th_unit:"单元", th_state:"状态", select_time:"选时刻：", update_n:"第 {0} 次更新",
+ rv_h:"预测距离 h", rv_d:"实测距离 d", rv_hd:"差 h−d",
+ rv_hint:"SSR = ½Σ(h−d)² = {0}；接近 0 即反验证通过",
+ pair_legend:"米，颜色越浅越近",
+ pairline_title:"R{0} 与 R{1} 的距离随时间变化（横轴：时刻序号）",
+ btn_overlay:"允许重叠", btn_overlay_on:"重叠中", btn_all:"全部叠加",
+ lg_landmark:"Landmark", lg_start:"起点", lg_end:"终点", lg_arrow:"箭头=运动方向",
+ cos_best:"最相似的两条轨迹：R{0} 与 R{1}，cosθ = {2}（越接近 1 越同向）",
+ err_basis:"B_w 的 9 个格子必须填数字", err_x0:"X[0] 必须是三个数字",
+ err_point:"点 {0} 坐标必须全是数字", err_fmt:"机器人{0} {1} 第{2}个距离格式不对",
+ err_zero_h:"预测距离为 0，无法求导", err_singular:"JᵀJ 不可逆，无法更新",
+ step_ssr:"本步 SSR = {0}"
+},
+en:{
+ page_title:"SLAM Gauss-Newton Offline Localization Calculator (Swarm/Trajectory)",
+ app_title:"SLAM Gauss-Newton Offline Localization Calculator (Swarm / Trajectory)",
+ app_sub1:"Combine the two switches freely: the swarm switch sets the robot count, the trajectory switch sets the time-step count; each robot x time unit runs an independent GN localization",
+ app_sub2:"Zero dependencies, fully offline, just double-click to run. B_L is no longer needed (orthogonal rotation does not change distance); positions are expressed in the B_w basis",
+ sec_basis:"1. World-Frame Basis B_w (3 x 3, write basis vectors by column, identity by default)",
+ sec_switches:"2. Two Switches", sw_group:"Swarm mode (multiple robots)", sw_track:"Trajectory mode (multiple time steps)",
+ robot_count:"Robot count R: ", step_count_label:"Time-step count T: ", dt_label:"Time interval dt: ",
+ dt_hint:"dt only generates time-stamp labels and does not enter the localization; time stamp t_k = k*dt",
+ sec_x0:"3. Initial Guess X[0] (shared starting point for all units)",
+ sec_landmark:"4. Landmarks (one shared set for all units)", lm_count:"Landmark count: ",
+ col_point:"Point", col_note:"Note",
+ sec_measure:"5. Measured Distances for Each Unit (enter a number or sqrt(14))",
+ btn_single:"Single-Point Example", btn_q3:"Load Q3 Swarm Example", btn_q2:"Load Q2 Trajectory Example",
+ btn_q4:"Random Q4", btn_build:"Build and Solve", btn_reset:"Clear Results",
+ sec_summary:"6. Summary of Results", sec_detail:"7. Detailed GN Matrices (select unit and iteration)",
+ sec_reverse:"8. Reverse Validation (Q2-2: predicted vs measured distances)",
+ sec_pairheat:"9. Pairwise Robot Distance: Pair x Time Heatmap (click a row for its line chart)",
+ sec_traj:"10. Trajectory Visualization (3D, rotatable; landmarks as black dots)",
+ view_free:"Free View", view_xy:"Front XY", view_xz:"Front XZ", view_yz:"Front YZ",
+ tg_solved:"Solved Trajectories", tg_true:"True Trajectories", tg_both:"Both Overlaid",
+ sec_cos:"11. Trajectory Direction Similarity cos(theta) (click a cell to highlight the two trajectories)",
+ robot_n:"Robot {0}", expand_more:"Expand the other {0} time steps", collapse:"Collapse",
+ col_time:"Time", to_x:"To {0}", conv_n:"Converged ({0} steps)", iter_limit:"Reached iteration limit",
+ th_unit:"Unit", th_state:"Status", select_time:"Select time: ", update_n:"Update {0}",
+ rv_h:"Predicted h", rv_d:"Measured d", rv_hd:"Diff h-d",
+ rv_hint:"SSR = 0.5*sum(h-d)^2 = {0}; close to 0 means reverse validation passed",
+ pair_legend:"m, lighter = closer",
+ pairline_title:"Distance between R{0} and R{1} over time (x-axis: time-step index)",
+ btn_overlay:"Allow overlay", btn_overlay_on:"Overlay: On", btn_all:"Overlay all",
+ lg_landmark:"Landmark", lg_start:"Start", lg_end:"End", lg_arrow:"Arrow = direction",
+ cos_best:"Most similar trajectories: R{0} and R{1}, cos(theta) = {2} (closer to 1 = more aligned)",
+ err_basis:"The 9 cells of B_w must be numbers", err_x0:"X[0] must be three numbers",
+ err_point:"Point {0} coordinates must all be numbers", err_fmt:"Robot {0} {1} distance {2} has an invalid format",
+ err_zero_h:"Predicted distance is 0, cannot differentiate", err_singular:"JtJ is not invertible, cannot update",
+ step_ssr:"SSR at this step = {0}"
+}};
+function i18n(k,...a){
+  let s=(I18N[lang][k]!==undefined?I18N[lang][k]:I18N.zh[k]);
+  a.forEach((v,i)=>{s=s.split("{"+i+"}").join(v);});
+  return s;
+}
+function applyLang(){
+  document.documentElement.lang=lang==="zh"?"zh-CN":"en";
+  document.title=i18n("page_title");
+  document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=i18n(el.dataset.i18n);});
+  document.getElementById("btn-lang").textContent=lang==="zh"?"EN":"中";
+}
+document.getElementById("btn-lang").addEventListener("click",()=>{
+  lang=lang==="zh"?"en":"zh";
+  applyLang();buildMeasures();
+  if(RESULTS){
+    const svPairs=selectedPairs.slice(),svOv=overlayMode;
+    renderSummary(cfg(),RESULTS.Bw);renderViz();
+    selectedPairs=svPairs;overlayMode=svOv;
+    renderPairHeat();paintPairLines();
+  }
+});
+
+/* ================= 矩阵工具 ================= */
+const zeros=(r,c)=>Array.from({length:r},()=>new Array(c).fill(0));
+const transpose=M=>M[0].map((_,j)=>M.map(row=>row[j]));
+function matMul(A,B){
+  const r=A.length,k=A[0].length,c=B[0].length,out=zeros(r,c);
+  for(let i=0;i<r;i++)for(let j=0;j<c;j++){let s=0;for(let t=0;t<k;t++)s+=A[i][t]*B[t][j];out[i][j]=s;}
+  return out;
+}
+function matVec(A,v){return A.map(row=>row.reduce((s,a,j)=>s+a*v[j],0));}
+const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
+const norm=a=>Math.sqrt(dot(a,a));
+function inverse(M){
+  const n=M.length,A=M.map((row,i)=>row.concat(Array.from({length:n},(_,j)=>i===j?1:0)));
+  for(let col=0;col<n;col++){
+    let piv=col;
+    for(let r=col+1;r<n;r++)if(Math.abs(A[r][col])>Math.abs(A[piv][col]))piv=r;
+    if(Math.abs(A[piv][col])<1e-12)return{ok:false};
+    [A[col],A[piv]]=[A[piv],A[col]];
+    const d=A[col][col];
+    for(let j=0;j<2*n;j++)A[col][j]/=d;
+    for(let r=0;r<n;r++)if(r!==col){const f=A[r][col];for(let j=0;j<2*n;j++)A[r][j]-=f*A[col][j];}
+  }
+  return{ok:true,inv:A.map(row=>row.slice(n))};
+}
+const clean=x=>{if(Math.abs(x)<5e-10)return 0;const r=Math.round(x);return Math.abs(x-r)<1e-9?r:x;};
+function fmt(x){x=clean(x);if(x===0)return"0";let s=x.toFixed(4);if(s.indexOf(".")>=0)s=s.replace(/0+$/,"").replace(/\.$/,"");return s;}
+function dispFmt(x){if(Math.abs(x)<1e-8)return"0";let s=x.toFixed(4);if(s.indexOf(".")>=0)s=s.replace(/0+$/,"").replace(/\.$/,"");return s;}
+
+/* ================= 默认数据 ================= */
+const NAMES="ABCDEFGH".split("");
+const DEFAULT_C=[[4,0,0],[0,5,0],[0,0,6],[4,5,6],[1,1,0],[2,0,3],[0,2,2],[3,3,3]];
+const DEFAULT_D=["sqrt(14)","sqrt(11)","sqrt(30)","sqrt(43)","3","4","3.5","5"];
+let measState={};
+let currentLandmarkC=DEFAULT_C;
+const Q3_C=[[-3,4,-7],[-21,14,0],[9,7,-18],[13,17,3]];
+const Q3_MEAS=[
+ [18.41195,35.58089,24.18677,20.24846],
+ [8.944272,18.574176,23.874673,31.064449],
+ [7.81025,24.37212,13.37909,16.43168],
+ [9.273618,20.712315,25.019992,28.757608],
+ [20.34699,31.92178,29.76575,19.20937]];
+const Q2_TRACK=[
+ ["sqrt(14)","sqrt(11)","sqrt(30)","sqrt(43)"],
+ [3.690528,3.036445,5.900847,6.574192],
+ [3.648287,3.051229,5.874521,6.205643],
+ [13.80507,15.98687,19.03103,21.24100]];
+
+/* ================= 输入 UI ================= */
+function buildBasis(){
+  const el=document.getElementById("bw-input");el.innerHTML="";
+  for(let i=0;i<9;i++){const inp=document.createElement("input");inp.type="number";inp.step="any";inp.value=(i%4===0)?1:0;el.appendChild(inp);}
+}
+function readBasis(){
+  const vals=[...document.getElementById("bw-input").querySelectorAll("input")].map(e=>parseFloat(e.value));
+  if(vals.some(v=>Number.isNaN(v)))return null;
+  return [[vals[0],vals[1],vals[2]],[vals[3],vals[4],vals[5]],[vals[6],vals[7],vals[8]]].map(r=>r.map(clean));
+}
+function buildLandmarks(){
+  const n=+document.getElementById("lm-count").value;
+  const body=document.getElementById("lm-body");body.innerHTML="";
+  for(let i=0;i<n;i++){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="lm-name">${NAMES[i]}</td>`+
+      [0,1,2].map(k=>`<td><input type="text" value="${currentLandmarkC[i][k]}"></td>`).join("")+
+      `<td class="hint">L${i+1}</td>`;
+    body.appendChild(tr);
+  }
+}
+function readLandmarks(){
+  const rows=[...document.getElementById("lm-body").querySelectorAll("tr")],out=[];
+  for(const tr of rows){
+    const ins=tr.querySelectorAll("input");
+    const c=[0,1,2].map(k=>parseFloat(ins[k].value));
+    if(c.some(v=>Number.isNaN(v)))return{err:i18n("err_point",tr.firstChild.textContent)};
+    out.push(c.map(clean));
+  }
+  return{points:out};
+}
+function parseMeasure(s){
+  s=s.trim();const m=s.match(/^sqrt\((-?\d+(?:\.\d+)?)\)$/i);
+  if(m)return Math.sqrt(parseFloat(m[1]));
+  const v=parseFloat(s);return Number.isNaN(v)?null:v;
+}
+function cfg(){
+  return {
+    R:document.getElementById("sw-group").checked?+document.getElementById("robot-count").value:1,
+    T:document.getElementById("sw-track").checked?+document.getElementById("step-count").value:1,
+    dt:document.getElementById("sw-track").checked?parseFloat(document.getElementById("dt").value):0
+  };
+}
+function timeLabel(k,dt){return "t="+Number((k*dt).toFixed(6));}
+let blockExpanded={};
+function buildMeasures(){
+  const c=cfg(),area=document.getElementById("measure-area");
+  const saved=measState;measState={};
+  area.innerHTML="";
+  const heads=[...document.getElementById("lm-body").querySelectorAll("tr")].map(tr=>tr.firstChild.textContent);
+  const fold=c.T>5;
+  for(let r=0;r<c.R;r++){
+    const block=document.createElement("div");block.className="robot-block";
+    let rows="";
+    const open=!!blockExpanded[r];
+    for(let t=0;t<c.T;t++){
+      let cells="";
+      for(let j=0;j<heads.length;j++){
+        const key=`${r}-${t}-${j}`;
+        let val=saved[key];
+        if(val===undefined)val=(r===0&&t===0)?DEFAULT_D[j]:"1";
+        measState[key]=val;
+        cells+=`<td><input class="meas-input" data-k="${key}" value="${val}"></td>`;
+      }
+      const hidden=fold&&!open&&t>=2&&t<=c.T-2;
+      if(fold&&t===2&&!open)
+        rows+=`<tr class="expand-row" data-r="${r}"><td colspan="${heads.length+1}">${i18n("expand_more",c.T-3)}</td></tr>`;
+      rows+=`<tr${hidden?' class="collapsed-row"':""}><td class="lm-name">${timeLabel(t,c.dt)}</td>${cells}</tr>`;
+    }
+    if(fold&&open)
+      rows+=`<tr class="expand-row" data-r="${r}" data-close="1"><td colspan="${heads.length+1}">${i18n("collapse")}</td></tr>`;
+    block.innerHTML=`<div class="rb-title">${i18n("robot_n",r+1)}</div>
+      <table class="meas-tbl"><colgroup><col style="width:14%">${heads.map(()=>'<col>').join("")}</colgroup>
+      <thead><tr><th>${i18n("col_time")}</th>${heads.map(h=>`<th>${i18n("to_x",h)}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    area.appendChild(block);
+  }
+  area.querySelectorAll(".meas-input").forEach(inp=>inp.addEventListener("input",e=>{measState[e.target.dataset.k]=e.target.value;}));
+  area.querySelectorAll(".expand-row").forEach(tr=>tr.addEventListener("click",()=>{
+    blockExpanded[+tr.dataset.r]=!tr.dataset.close;buildMeasures();}));
+}
+function readMeasures(){
+  const c=cfg(),m=+document.getElementById("lm-count").value,out=[];
+  for(let r=0;r<c.R;r++){const row=[];for(let t=0;t<c.T;t++){
+    const d=[];
+    for(let j=0;j<m;j++){const v=parseMeasure(measState[`${r}-${t}-${j}`]||"");if(v===null)return{err:i18n("err_fmt",r+1,timeLabel(t,c.dt),j+1)};d.push(clean(v));}
+    row.push(d);
+  }out.push(row);}
+  return{data:out};
+}
+function readX0(){
+  const v=[0,1,2].map(k=>parseFloat(document.getElementById("x0-"+k).value));
+  return v.some(x=>Number.isNaN(x))?null:v.map(clean);
+}
+
+/* ================= GN 求解 ================= */
+function gnStep(X,Bw,landmarks,d){
+  const m=landmarks.length,Rv=[],J=zeros(m,3);
+  for(let i=0;i<m;i++){
+    const diff=landmarks[i].map((v,k)=>v-X[k]);
+    const u=matVec(Bw,diff),h=norm(u);
+    if(h<1e-10)return{singular:true,msg:i18n("err_zero_h")};
+    Rv.push(clean(h-d[i]));
+    for(let j=0;j<3;j++){let s=0;for(let t=0;t<3;t++)s+=u[t]*Bw[t][j];J[i][j]=clean(-s/h);}
+  }
+  const Jt=transpose(J),JtJ=matMul(Jt,J).map(r=>r.map(clean)),inv=inverse(JtJ);
+  if(!inv.ok)return{singular:true,msg:i18n("err_singular")};
+  const JtJinv=inv.inv.map(r=>r.map(clean)),JtR=matVec(Jt,Rv).map(clean);
+  const delta=matVec(JtJinv,JtR).map(v=>clean(-v));
+  return{R:Rv,J,JtJ,JtJinv,JtR,delta,Xnext:X.map((v,k)=>clean(v+delta[k])),ssr:clean(0.5*dot(Rv,Rv))};
+}
+function solveUnit(Bw,landmarks,d,X0){
+  let X=X0.slice(),steps=[],res;
+  for(let k=0;k<30;k++){
+    res=gnStep(X,Bw,landmarks,d);
+    if(res.singular)return{steps,finalX:X,converged:false,singular:true,msg:res.msg};
+    steps.push(res);X=res.Xnext;
+    if(norm(res.delta)<1e-8)return{steps,finalX:X,converged:true};
+  }
+  return{steps,finalX:X,converged:false};
+}
+
+/* ================= 渲染 ================= */
+function matrixHTML(M,rowLabels,colLabels){
+  const rows=M.map(r=>"<tr>"+r.map(x=>`<td>${fmt(x)}</td>`).join("")+"</tr>").join("");
+  const head=colLabels?`<div class="mlabels">${colLabels.map(c=>`<span>${c}</span>`).join("")}</div>`:"";
+  const lab=rowLabels?`<div class="rlabels">${rowLabels.map(c=>`<span>${c}</span>`).join("")}</div>`:"";
+  return `<div class="mwrap">${head}${lab}<div class="mat"><table>${rows}</table></div></div>`;
+}
+const vectorHTML=v=>matrixHTML(v.map(x=>[x]));
+let RESULTS=null;
+let summaryExpanded={};
+function renderSummary(c,Bw){
+  const unitSel=document.getElementById("det-unit");unitSel.innerHTML="";
+  let rows="";
+  const foldT=c.T>5;
+  for(let r=0;r<c.R;r++){
+    const open=!!summaryExpanded[r];
+    for(let t=0;t<c.T;t++){
+      const label=`${i18n("robot_n",r+1)} / ${timeLabel(t,c.dt)}`;
+      const res=RESULTS.units[r][t];
+      unitSel.innerHTML+=`<option value="${r}-${t}">${label}</option>`;
+      const tag=res.singular?`<span class="bad-tag">${res.msg}</span>`:
+        res.converged?`<span class="ok-tag">${i18n("conv_n",res.steps.length)}</span>`:`<span class="bad-tag">${i18n("iter_limit")}</span>`;
+      const x=res.finalX;
+      const hidden=foldT&&!open&&t>=2&&t<=c.T-2;
+      if(foldT&&t===2&&!open)
+        rows+=`<tr class="expand-row" data-sr="${r}"><td colspan="6">${i18n("expand_more",c.T-3)}</td></tr>`;
+      rows+=`<tr${hidden?' class="collapsed-row"':""}><td>${label}</td><td>${fmt(x[0])}</td><td>${fmt(x[1])}</td><td>${fmt(x[2])}</td>
+        <td>${res.singular?"—":fmt(res.steps[res.steps.length-1].ssr)}</td><td>${tag}</td></tr>`;
+    }
+  }
+  document.getElementById("summary-area").innerHTML=
+    `<table class="sum-tbl"><thead><tr><th>${i18n("th_unit")}</th><th>x</th><th>y</th><th>z</th><th>SSR</th><th>${i18n("th_state")}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  document.querySelectorAll("#summary-area .expand-row").forEach(tr=>tr.addEventListener("click",()=>{
+    const r=+tr.dataset.sr;summaryExpanded[r]=!summaryExpanded[r];renderSummary(c,Bw);}));
+  renderDistMatrices(c,Bw);
+  unitSel.onchange=()=>{populateSteps();renderDetail();renderReverse();};
+  populateSteps();renderDetail();renderReverse();
+}
+function distMatrixAt(Bw,R,t){
+  const D=zeros(R,R);
+  for(let i=0;i<R;i++)for(let j=0;j<R;j++){
+    const diff=RESULTS.units[i][t].finalX.map((v,k)=>v-RESULTS.units[j][t].finalX[k]);
+    D[i][j]=clean(norm(matVec(Bw,diff)));
+  }
+  return D;
+}
+const dmLabels=R=>Array.from({length:R},(_,i)=>`R${i+1}`);
+function renderDistMatrices(c,Bw){
+  const area=document.getElementById("distmatrix-area");
+  if(c.R<2){area.innerHTML="";return;}
+  if(c.T===1){area.innerHTML=matrixHTML(distMatrixAt(Bw,c.R,0),dmLabels(c.R),dmLabels(c.R));return;}
+  area.innerHTML=`<div class="det-controls"><label>${i18n("select_time")}<select id="dm-time">${
+    Array.from({length:c.T},(_,t)=>`<option value="${t}">${timeLabel(t,c.dt)}</option>`).join("")}</select></label></div>
+    <div id="dm-matrix"></div>`;
+  const sel=document.getElementById("dm-time"),out=document.getElementById("dm-matrix");
+  const paint=()=>{out.innerHTML=matrixHTML(distMatrixAt(Bw,c.R,+sel.value),dmLabels(c.R),dmLabels(c.R));};
+  sel.onchange=paint;paint();
+}
+function populateSteps(){
+  const [r,t]=document.getElementById("det-unit").value.split("-").map(Number);
+  const sel=document.getElementById("det-step");sel.innerHTML="";
+  const res=RESULTS.units[r][t];
+  res.steps.forEach((_,k)=>sel.innerHTML+=`<option value="${k}">${i18n("update_n",k+1)}</option>`);
+  sel.onchange=renderDetail;
+}
+function renderDetail(){
+  const [r,t]=document.getElementById("det-unit").value.split("-").map(Number);
+  const k=+document.getElementById("det-step").value;
+  const res=RESULTS.units[r][t],st=res.steps[k],rl=RESULTS.landmarkNames.map(n=>"r<sub>"+n+"</sub>");
+  let Xk=RESULTS.x0;
+  for(let i=0;i<k;i++)Xk=res.steps[i].Xnext;
+  document.getElementById("detail-area").innerHTML=
+    `<div class="vec-h">X[${k}]</div>${vectorHTML(Xk)}
+     <div class="vec-h">R</div>${matrixHTML(st.R.map(x=>[x]),rl)}
+     <div class="vec-h">J</div>${matrixHTML(st.J,rl,["∂/∂x","∂/∂y","∂/∂z"])}
+     <div class="vec-h">JᵀJ</div>${matrixHTML(st.JtJ)}
+     <div class="vec-h">(JᵀJ)⁻¹</div>${matrixHTML(st.JtJinv)}
+     <div class="vec-h">JᵀR</div>${vectorHTML(st.JtR)}
+     <div class="vec-h">Δ = −(JᵀJ)⁻¹JᵀR</div>${vectorHTML(st.delta)}
+     <div class="vec-h">X[${k+1}] = X[${k}]+Δ</div>${vectorHTML(st.Xnext)}
+     <div class="hint">${i18n("step_ssr",fmt(st.ssr))}</div>`;
+}
+
+/* ================= 事件 ================= */
+const showErr=m=>{const e=document.getElementById("error");e.textContent=m;e.style.display=m?"block":"none";};
+document.getElementById("sw-group").addEventListener("change",e=>{
+  document.getElementById("group-extra").style.display=e.target.checked?"flex":"none";buildMeasures();});
+document.getElementById("sw-track").addEventListener("change",e=>{
+  document.getElementById("track-extra").style.display=e.target.checked?"flex":"none";buildMeasures();});
+document.getElementById("robot-count").addEventListener("change",buildMeasures);
+document.getElementById("step-count").addEventListener("change",buildMeasures);
+document.getElementById("lm-count").addEventListener("change",()=>{buildLandmarks();buildMeasures();});
+document.getElementById("btn-build").addEventListener("click",()=>{
+  showErr("");
+  const Bw=readBasis();if(!Bw){showErr(i18n("err_basis"));return;}
+  const x0=readX0();if(!x0){showErr(i18n("err_x0"));return;}
+  const rl=readLandmarks();if(rl.err){showErr(rl.err);return;}
+  const rm=readMeasures();if(rm.err){showErr(rm.err);return;}
+  const c=cfg();
+  const units=[];
+  for(let r=0;r<c.R;r++){const row=[];let prev=x0;for(let t=0;t<c.T;t++){
+    const unit=solveUnit(Bw,rl.points,rm.data[r][t],prev);unit.d=rm.data[r][t];
+    row.push(unit);prev=unit.finalX;}units.push(row);}
+  RESULTS={units,x0,Bw,landmarks:rl.points,landmarkNames:rl.points.map((_,i)=>NAMES[i])};
+  document.getElementById("result-section").style.display="block";
+  renderSummary(c,Bw);renderViz();
+});
+document.getElementById("btn-reset").addEventListener("click",()=>{
+  document.getElementById("result-section").style.display="none";RESULTS=null;showErr("");});
+
+/* ================= 手写预置与反验证 ================= */
+function fillPresetMeasures(grid){
+  const c=cfg();
+  for(let r=0;r<c.R;r++)for(let t=0;t<c.T;t++){
+    const u=r*c.T+t;
+    for(let j=0;j<grid[0].length;j++)
+      if(measState[r+"-"+t+"-"+j]!==undefined)measState[r+"-"+t+"-"+j]=String(grid[u][j]);
+  }
+  buildMeasures();
+}
+function applyPreset(p){
+  const swG=document.getElementById("sw-group"),swT=document.getElementById("sw-track");
+  swG.checked=(p==="q3");swT.checked=(p==="q2");
+  document.getElementById("group-extra").style.display=p==="q3"?"flex":"none";
+  document.getElementById("track-extra").style.display=p==="q2"?"flex":"none";
+  document.getElementById("lm-count").value=4;
+  if(p==="q3"){document.getElementById("robot-count").value=5;currentLandmarkC=Q3_C;}
+  else if(p==="q2"){document.getElementById("step-count").value=4;document.getElementById("dt").value=1;currentLandmarkC=DEFAULT_C;}
+  else currentLandmarkC=DEFAULT_C;
+  buildLandmarks();buildMeasures();
+  if(p==="q3")fillPresetMeasures(Q3_MEAS);
+  if(p==="q2")fillPresetMeasures(Q2_TRACK);
+  if(p==="single")fillPresetMeasures([DEFAULT_D.slice(0,4)]);
+}
+function renderReverse(){
+  const [r,t]=document.getElementById("det-unit").value.split("-").map(Number);
+  const res=RESULTS.units[r][t],X=res.finalX;let rows="",sum=0;
+  for(let i=0;i<RESULTS.landmarks.length;i++){
+    const diff=RESULTS.landmarks[i].map((v,k)=>v-X[k]);
+    const h=norm(matVec(RESULTS.Bw,diff)),rr=clean(h-res.d[i]);sum+=rr*rr;
+    rows+="<tr><td>"+NAMES[i]+"</td><td>"+fmt(h)+"</td><td>"+fmt(res.d[i])+"</td><td>"+fmt(rr)+"</td></tr>";
+  }
+  document.getElementById("reverse-area").innerHTML=
+    '<table class="sum-tbl"><thead><tr><th>Landmark</th><th>'+i18n("rv_h")+'</th><th>'+i18n("rv_d")+'</th><th>'+i18n("rv_hd")+'</th></tr></thead><tbody>'+
+    rows+'</tbody></table><div class="hint">'+i18n("rv_hint",fmt(0.5*sum))+'</div>';
+}
+document.getElementById("btn-load-single").addEventListener("click",()=>applyPreset("single"));
+document.getElementById("btn-load-q3").addEventListener("click",()=>applyPreset("q3"));
+document.getElementById("btn-load-q2").addEventListener("click",()=>applyPreset("q2"));
+
+/* ================= Q4 配色与随机生成 ================= */
+const ROBOT_COLORS=["#2a9d8f","#e76f51","#e9c46a","#264653","#6a4c93","#8ab17d","#c77dff","#f4a261"];
+const mixRGB=(a,b,t)=>a.map((x,i)=>Math.round(x+(b[i]-x)*t));
+const rgbStr=c=>"rgb("+c.join(",")+")";
+function tealScale(t){t=Math.max(0,Math.min(1,t));return rgbStr(mixRGB([234,244,242],[15,76,92],t));}
+function cosColor(v){return rgbStr(mixRGB([234,244,242],[15,76,92],Math.abs(v)));}
+const rnd=(a,b)=>a+Math.random()*(b-a);
+let TRUE_TRACKS=null;
+const TETRA=[[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]].map(d=>d.map(x=>x/Math.sqrt(3)));
+function genQ4(){
+  const C=TETRA.map(d=>{
+    const R=rnd(18,24);
+    return d.map(x=>Math.round(x*R+rnd(-1.5,1.5)));
+  });
+  const T=200,dt=0.1,tracks=[];
+  for(let i=0;i<5;i++){
+    const p0=[rnd(-9,9),rnd(-9,9),rnd(-9,9)],v=[rnd(-0.7,0.7),rnd(-0.7,0.7),rnd(-0.7,0.7)],
+      A=[rnd(-3,3),rnd(-3,3),rnd(-3,3)],w=rnd(0.2,0.45),ph=rnd(0,6.28),pts=[];
+    for(let k=0;k<T;k++){const t=k*dt,s=Math.sin(w*t+ph);pts.push([
+      p0[0]+v[0]*t+A[0]*s,p0[1]+v[1]*t+A[1]*s,p0[2]+v[2]*t+A[2]*s]);}
+    tracks.push(pts);
+  }
+  const meas=[];
+  for(let i=0;i<5;i++){const row=[];for(let k=0;k<T;k++)
+    row.push(C.map(c=>clean(norm(c.map((x,j)=>x-tracks[i][k][j])))));meas.push(row);}
+  return{C,tracks,meas};
+}
+function applyQ4(){
+  const q=genQ4();
+  document.getElementById("sw-group").checked=true;
+  document.getElementById("sw-track").checked=true;
+  document.getElementById("group-extra").style.display="flex";
+  document.getElementById("track-extra").style.display="flex";
+  document.getElementById("robot-count").value=5;
+  document.getElementById("step-count").value=200;
+  document.getElementById("dt").value=0.1;
+  document.getElementById("lm-count").value=4;
+  currentLandmarkC=q.C;blockExpanded={};
+  buildLandmarks();buildMeasures();
+  for(let i=0;i<5;i++)for(let k=0;k<200;k++)for(let j=0;j<4;j++)
+    measState[i+"-"+k+"-"+j]=dispFmt(q.meas[i][k][j]);
+  TRUE_TRACKS=q.tracks;
+  buildMeasures();
+}
+
+/* ================= Q4 可视化 ================= */
+let PAIRS=[],PAIR_DIST=null,overlayMode=false,selectedPairs=[];
+const PAIR_LINE_COLORS=["#2a9d8f","#e76f51","#e9c46a","#264653","#6a4c93","#8ab17d","#c77dff","#f4a261","#457b9d","#bc6c25"];
+const getSolvedTracks=()=>RESULTS.units.map(row=>row.map(u=>u.finalX));
+function buildPairData(){
+  const tr=getSolvedTracks(),R=tr.length,T=tr[0].length;
+  PAIRS=[];
+  for(let i=0;i<R;i++)for(let j=i+1;j<R;j++)PAIRS.push([i,j]);
+  PAIR_DIST=PAIRS.map(([i,j])=>{
+    const arr=[];for(let k=0;k<T;k++)
+      arr.push(norm(matVec(RESULTS.Bw,tr[i][k].map((x,t)=>x-tr[j][k][t]))));
+    return arr;});
+}
+function renderPairHeat(){
+  const area=document.getElementById("pairheat-area"),nP=PAIRS.length,T=PAIR_DIST[0].length;
+  const cellW=Math.max(3,Math.min(9,Math.floor(900/T))),cellH=26,labelW=56,padT=20;
+  const w=labelW+T*cellW,h=padT+nP*cellH,dpr=window.devicePixelRatio||1;
+  const cv=document.createElement("canvas");cv.className="heat-canvas";
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+"px";cv.style.height=h+"px";
+  const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);
+  let vmin=Infinity,vmax=-Infinity;
+  PAIR_DIST.forEach(a=>a.forEach(v=>{vmin=Math.min(vmin,v);vmax=Math.max(vmax,v);}));
+  ctx.font="11px Consolas";ctx.fillStyle="#5b7180";
+  const step=Math.max(1,Math.ceil(24/cellW));
+  for(let k=0;k<T;k+=step)ctx.fillText(k,labelW+k*cellW,14);
+  for(let p=0;p<nP;p++){
+    const [i,j]=PAIRS[p];
+    ctx.fillStyle="#0f4c5c";ctx.fillText("R"+(i+1)+"-R"+(j+1),4,padT+p*cellH+17);
+    for(let k=0;k<T;k++){
+      ctx.fillStyle=tealScale((PAIR_DIST[p][k]-vmin)/(vmax-vmin||1));
+      ctx.fillRect(labelW+k*cellW,padT+p*cellH,cellW-1,cellH-1);
+    }
+  }
+  const lg=document.createElement("div");lg.className="legend-bar";
+  lg.innerHTML=`<span>${vmin.toFixed(2)}</span><div class="bar" style="background:linear-gradient(90deg,${tealScale(0)},${tealScale(1)})"></div><span>${vmax.toFixed(2)}</span><span>${i18n("pair_legend")}</span>`;
+  area.innerHTML="";area.appendChild(cv);area.appendChild(lg);
+  const ctl=document.createElement("div");ctl.className="det-controls";
+  const bOv=document.createElement("button");
+  bOv.textContent=overlayMode?i18n("btn_overlay_on"):i18n("btn_overlay");
+  bOv.className=overlayMode?"btn-primary":"btn-ghost";
+  const bAll=document.createElement("button");bAll.textContent=i18n("btn_all");bAll.className="btn-ghost";
+  ctl.appendChild(bOv);ctl.appendChild(bAll);area.appendChild(ctl);
+  bOv.onclick=()=>{
+    overlayMode=!overlayMode;
+    if(!overlayMode&&selectedPairs.length>1)selectedPairs=selectedPairs.slice(0,1);
+    renderPairHeat();paintPairLines();
+  };
+  bAll.onclick=()=>{
+    if(selectedPairs.length===nP)selectedPairs=[];
+    else{overlayMode=true;selectedPairs=Array.from({length:nP},(_,k)=>k);}
+    renderPairHeat();paintPairLines();
+  };
+  cv.addEventListener("click",e=>{
+    const rect=cv.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
+    if(x<labelW)return;
+    const p=Math.floor((y-padT)/cellH);
+    if(p<0||p>=nP)return;
+    if(overlayMode){
+      const ix=selectedPairs.indexOf(p);
+      if(ix>=0)selectedPairs.splice(ix,1);else selectedPairs.push(p);
+    }else{
+      if(selectedPairs.length===1&&selectedPairs[0]===p)selectedPairs=[];
+      else selectedPairs=[p];
+    }
+    paintPairLines();
+  });
+}
+function paintPairLines(){
+  const area=document.getElementById("pairline-area");
+  if(selectedPairs.length===0){area.innerHTML="";return;}
+  const T=PAIR_DIST[0].length;
+  let vmin=Infinity,vmax=-Infinity;
+  selectedPairs.forEach(p=>PAIR_DIST[p].forEach(v=>{vmin=Math.min(vmin,v);vmax=Math.max(vmax,v);}));
+  const rng=vmax-vmin||1;vmin-=0.05*rng;vmax+=0.05*rng;
+  const w=900,h=300,padL=54,padR=14,padT=48,padB=34,dpr=window.devicePixelRatio||1;
+  const cv=document.createElement("canvas");cv.className="line-canvas";
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.width="100%";cv.style.maxWidth=w+"px";cv.style.height=h+"px";
+  const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);
+  const X=k=>padL+k*(w-padL-padR)/(T-1),Y=v=>padT+(vmax-v)*(h-padT-padB)/(vmax-vmin);
+  ctx.strokeStyle="#d5dde1";ctx.fillStyle="#5b7180";ctx.font="11px Consolas";
+  for(let g=0;g<=4;g++){const v=vmin+(vmax-vmin)*g/4,y=Y(v);
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(w-padR,y);ctx.stroke();ctx.fillText(v.toFixed(2),6,y+4);}
+  selectedPairs.forEach(p=>{
+    const data=PAIR_DIST[p],color=PAIR_LINE_COLORS[p%PAIR_LINE_COLORS.length];
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();
+    data.forEach((v,k)=>{const x=X(k),y=Y(v);k?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+  });
+  for(let k=0;k<T;k+=Math.max(1,Math.floor((T-1)/6)))ctx.fillText(String(k),X(k)-6,h-12);
+  ctx.font="12px Microsoft YaHei";
+  selectedPairs.forEach((p,li)=>{
+    const [i,j]=PAIRS[p],color=PAIR_LINE_COLORS[p%PAIR_LINE_COLORS.length],lx=padL+li*84,ly=26;
+    ctx.fillStyle=color;ctx.fillRect(lx,ly-10,15,3);
+    ctx.fillStyle="#16303a";ctx.fillText("R"+(i+1)+"-R"+(j+1),lx+20,ly-4);
+  });
+  area.innerHTML="";area.appendChild(cv);
+}
+let viewState={rx:-0.55,ry:0.65},trackMode="solved",highlightPair=null,dragInfo=null;
+function currentTracks(){
+  const solved=getSolvedTracks();
+  if(trackMode==="true")return TRUE_TRACKS||solved;
+  return solved;
+}
+function getBounds(){
+  const pts=[];
+  getSolvedTracks().forEach(a=>a.forEach(p=>pts.push(p)));
+  if(TRUE_TRACKS)TRUE_TRACKS.forEach(a=>a.forEach(p=>pts.push(p)));
+  RESULTS.landmarks.forEach(p=>pts.push(p));
+  const mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+  pts.forEach(p=>p.forEach((v,k)=>{mn[k]=Math.min(mn[k],v);mx[k]=Math.max(mx[k],v);}));
+  return{cx:(mn[0]+mx[0])/2,cy:(mn[1]+mx[1])/2,cz:(mn[2]+mx[2])/2,
+    scale:Math.max(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2],1)/2*1.15};
+}
+const CAM=3.4;
+function rotate3D(p,b){
+  let x=(p[0]-b.cx)/b.scale,y=(p[1]-b.cy)/b.scale,z=(p[2]-b.cz)/b.scale;
+  const cy=Math.cos(viewState.ry),sy=Math.sin(viewState.ry);
+  const x1=x*cy+z*sy,z1=-x*sy+z*cy,cx=Math.cos(viewState.rx),sx=Math.sin(viewState.rx);
+  return[x1,y*cx-z1*sx,y*sx+z1*cx];
+}
+function hexRgb(h){h=h.replace("#","");return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function fogColor(hex,z){
+  const c=hexRgb(hex),bg=[251,252,253],t=Math.max(0,Math.min(1,(z+1.7)/3.4)),f=0.12+0.62*t;
+  return"rgb("+c.map((v,k)=>Math.round(v+(bg[k]-v)*f)).join(",")+")";
+}
+function drawTraj(){
+  const cv=document.getElementById("traj-canvas");
+  const w=Math.min(940,document.querySelector(".wrap").clientWidth-72),h=480,dpr=window.devicePixelRatio||1;
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+"px";cv.style.height=h+"px";
+  const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);
+  ctx.fillStyle="#fbfcfd";ctx.fillRect(0,0,w,h);
+  const b=getBounds(),ccx=w/2,ccy=h/2,sx=w*0.36,sy=h*0.36;
+  const toScr=q=>{const s=CAM/(CAM-q[2]);return[ccx+q[0]*s*sx,ccy-q[1]*s*sy,s,q[2]];};
+  const AL=6;
+  const axes=[[[AL,0,0],[-AL,0,0],"X"],[[0,AL,0],[0,-AL,0],"Y"],[[0,0,AL],[0,0,-AL],"Z"]];
+  ctx.lineWidth=1;
+  axes.forEach(([a,c,nm])=>{
+    const qa=toScr(rotate3D(a,b)),qc=toScr(rotate3D(c,b));
+    ctx.strokeStyle="#c9d2d7";ctx.beginPath();ctx.moveTo(qa[0],qa[1]);ctx.lineTo(qc[0],qc[1]);ctx.stroke();
+    ctx.fillStyle="#93a0a7";ctx.font="12px Consolas";ctx.fillText(nm,qa[0]+5,qa[1]+4);});
+  const drawPath=(track,color,thick)=>{
+    const qs=track.map(p=>toScr(rotate3D(p,b)));
+    for(let k=1;k<qs.length;k++){
+      const m=qs[k-1],n=qs[k],z=(m[3]+n[3])/2;
+      ctx.strokeStyle=fogColor(color,z);ctx.lineWidth=thick*((m[2]+n[2])/2);
+      ctx.beginPath();ctx.moveTo(m[0],m[1]);ctx.lineTo(n[0],n[1]);ctx.stroke();
+    }
+    return qs;
+  };
+  const arrowAt=(qs,idx,color)=>{
+    const m=qs[idx],n=qs[Math.min(qs.length-1,idx+4)],ang=Math.atan2(n[1]-m[1],n[0]-m[0]),len=9;
+    ctx.strokeStyle=fogColor(color,m[3]);ctx.lineWidth=1.8;ctx.beginPath();
+    ctx.moveTo(m[0],m[1]);ctx.lineTo(m[0]-len*Math.cos(ang-0.5),m[1]-len*Math.sin(ang-0.5));
+    ctx.moveTo(m[0],m[1]);ctx.lineTo(m[0]-len*Math.cos(ang+0.5),m[1]-len*Math.sin(ang+0.5));ctx.stroke();
+  };
+  const drawOne=(track,color,thick)=>{
+    const qs=drawPath(track,color,thick);
+    [0.2,0.45,0.7].forEach(f=>arrowAt(qs,Math.floor(f*(qs.length-1)),color));
+    const st=qs[0];ctx.fillStyle=fogColor(color,st[3]);ctx.beginPath();ctx.arc(st[0],st[1],4.2,0,6.283);ctx.fill();
+    const en=qs[qs.length-1];ctx.strokeStyle=fogColor(color,en[3]);ctx.lineWidth=2;ctx.strokeRect(en[0]-4.5,en[1]-4.5,9,9);
+  };
+  const solved=getSolvedTracks();let list;
+  if(trackMode==="both"){
+    list=[];for(let i=0;i<solved.length;i++){list.push([TRUE_TRACKS[i],i,1.2]);list.push([solved[i],i,2.3]);}
+  }else list=currentTracks().map((tr,i)=>[tr,i,2.4]);
+  list.forEach(([tr,i,thick])=>{
+    const dim=highlightPair!==null&&highlightPair.indexOf(i)<0;
+    ctx.globalAlpha=dim?0.28:1;drawOne(tr,ROBOT_COLORS[i],thick);ctx.globalAlpha=1;});
+  RESULTS.landmarks.forEach(p=>{
+    const q=toScr(rotate3D(p,b));
+    ctx.fillStyle="#111";ctx.beginPath();ctx.arc(q[0],q[1],4.5*q[2],0,6.283);ctx.fill();
+    ctx.strokeStyle="#fff";ctx.lineWidth=1.4;ctx.stroke();});
+  document.getElementById("traj-legend").innerHTML=
+    '<div class="trajectory-legend">'+solved.map((_,i)=>
+      `<span class="lg"><span class="swatch" style="background:${ROBOT_COLORS[i]}"></span>R${i+1}</span>`).join("")+
+    '<span class="lg"><span class="swatch" style="background:#111;height:9px;width:9px;border-radius:50%"></span>Landmark</span>'+
+    '<span class="lg">● '+i18n("lg_start")+'</span><span class="lg">■ '+i18n("lg_end")+'</span><span class="lg">'+i18n("lg_arrow")+'</span></div>';
+}
+function setView(v){
+  if(v==="free")viewState={rx:-0.55,ry:0.65};
+  if(v==="xy")viewState={rx:0,ry:0};
+  if(v==="xz")viewState={rx:1.5708,ry:0};
+  if(v==="yz")viewState={rx:0,ry:1.5708};
+  document.querySelectorAll("#view-btns button").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
+  drawTraj();
+}
+function cosineMatrix(tracks){
+  const R=tracks.length,T=tracks[0].length,M=zeros(R,R);
+  const vel=tracks.map(tr=>{const o=[];for(let k=0;k<T-1;k++)o.push(tr[k+1].map((x,j)=>x-tr[k][j]));return o;});
+  for(let i=0;i<R;i++){M[i][i]=1;for(let j=i+1;j<R;j++){
+    let s=0,cnt=0;
+    for(let k=0;k<T-1;k++){const a=vel[i][k],b=vel[j][k],na=norm(a),nb=norm(b);
+      if(na>1e-9&&nb>1e-9){s+=dot(a,b)/(na*nb);cnt++;}}
+    const v=clean(s/cnt);M[i][j]=v;M[j][i]=v;}}
+  return M;
+}
+function renderCos(){
+  const tr=getSolvedTracks(),M=cosineMatrix(tr),area=document.getElementById("cos-area"),R=M.length;
+  const cell=72,label=44,w=label+R*cell,h=label+R*cell,dpr=window.devicePixelRatio||1;
+  const cv=document.createElement("canvas");cv.className="heat-canvas";
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+"px";cv.style.height=h+"px";
+  const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);ctx.font="13px Consolas";
+  for(let i=0;i<R;i++){
+    ctx.fillStyle="#0f4c5c";ctx.fillText("R"+(i+1),8,label+i*cell+cell/2+5);
+    ctx.fillText("R"+(i+1),label+i*cell+cell/2-10,28);
+    for(let j=0;j<R;j++){
+      ctx.fillStyle=cosColor(M[i][j]);ctx.fillRect(label+j*cell,label+i*cell,cell-2,cell-2);
+      ctx.fillStyle=M[i][j]>0.55?"#fff":"#16303a";
+      ctx.fillText(M[i][j].toFixed(3),label+j*cell+12,label+i*cell+cell/2+5);
+    }
+  }
+  let best=-2,bi=-1,bj=-1;
+  for(let i=0;i<R;i++)for(let j=i+1;j<R;j++)if(M[i][j]>best){best=M[i][j];bi=i;bj=j;}
+  const note=document.createElement("div");note.className="cos-best";
+  note.textContent=i18n("cos_best",bi+1,bj+1,best.toFixed(4));
+  area.innerHTML="";area.appendChild(cv);area.appendChild(note);
+  cv.addEventListener("click",e=>{
+    const rect=cv.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
+    if(x<label||y<label)return;
+    const i=Math.floor((y-label)/cell),j=Math.floor((x-label)/cell);
+    if(i===j)return;
+    if(highlightPair&&highlightPair[0]===i&&highlightPair[1]===j)highlightPair=null;
+    else highlightPair=[i,j];
+    drawTraj();
+  });
+}
+function renderViz(){
+  buildPairData();renderPairHeat();
+  selectedPairs=[];overlayMode=false;
+  document.getElementById("pairline-area").innerHTML="";
+  highlightPair=null;trackMode="solved";
+  document.querySelectorAll("#track-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.t==="solved"));
+  drawTraj();renderCos();
+}
+document.getElementById("btn-gen-q4").addEventListener("click",applyQ4);
+document.querySelectorAll("#view-btns button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.v)));
+document.querySelectorAll("#track-toggle button").forEach(b=>b.addEventListener("click",()=>{
+  trackMode=b.dataset.t;
+  document.querySelectorAll("#track-toggle button").forEach(x=>x.classList.toggle("active",x===b));
+  drawTraj();}));
+const trajCv=document.getElementById("traj-canvas");
+trajCv.addEventListener("mousedown",e=>{dragInfo={x:e.clientX,y:e.clientY,rx:viewState.rx,ry:viewState.ry};});
+window.addEventListener("mousemove",e=>{if(!dragInfo)return;
+  viewState.ry=dragInfo.ry+(e.clientX-dragInfo.x)*0.01;
+  viewState.rx=dragInfo.rx+(e.clientY-dragInfo.y)*0.01;drawTraj();});
+window.addEventListener("mouseup",()=>dragInfo=null);
+
+buildBasis();buildLandmarks();buildMeasures();
+</script>
+</body>
+</html>
